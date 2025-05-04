@@ -1,5 +1,8 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,57 +11,73 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useToast } from "@/components/ui/use-toast";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { BadgeDollarSign, Bot, History, Settings, Activity } from "lucide-react";
+import { useBot } from "@/hooks/use-bot";
+
+// Define form schema
+const settingsFormSchema = z.object({
+  slippage: z.coerce.number().min(0.1).max(100),
+  swap_amount: z.coerce.number().min(0.1),
+  target_profit: z.coerce.number().min(1),
+  stop_loss: z.coerce.number().min(1),
+  rpc_url: z.string().url("Must be a valid URL"),
+  wallet_address: z.string().min(32).max(44),
+  telegram_enabled: z.boolean(),
+  telegram_token: z.string().optional(),
+  telegram_chat_id: z.string().optional(),
+});
+
+type SettingsFormValues = z.infer<typeof settingsFormSchema>;
 
 const Index = () => {
-  const { toast } = useToast();
-  const [botStatus, setBotStatus] = useState<"idle" | "running" | "error">("idle");
-  const [loading, setLoading] = useState(false);
-  
-  const startBot = async () => {
-    setLoading(true);
-    try {
-      // Here we would connect to Supabase to start the bot or invoke an edge function
-      setTimeout(() => {
-        setBotStatus("running");
-        setLoading(false);
-        toast({
-          title: "Bot started",
-          description: "Token sniping bot is now running and monitoring for new liquidity events.",
-        });
-      }, 2000);
-    } catch (error) {
-      setLoading(false);
-      setBotStatus("error");
-      toast({
-        variant: "destructive",
-        title: "Failed to start bot",
-        description: "There was an error starting the token sniping bot.",
-      });
-    }
-  };
+  const {
+    botStatus,
+    loading,
+    settings,
+    tradeHistory,
+    stats,
+    startBot,
+    stopBot,
+    saveSettings
+  } = useBot();
 
-  const stopBot = async () => {
-    setLoading(true);
-    try {
-      // Here we would connect to Supabase to stop the bot
-      setTimeout(() => {
-        setBotStatus("idle");
-        setLoading(false);
-        toast({
-          title: "Bot stopped",
-          description: "Token sniping bot has been stopped.",
-        });
-      }, 1000);
-    } catch (error) {
-      setLoading(false);
-      toast({
-        variant: "destructive",
-        title: "Failed to stop bot",
-        description: "There was an error stopping the token sniping bot.",
+  // Set up the form
+  const form = useForm<SettingsFormValues>({
+    resolver: zodResolver(settingsFormSchema),
+    defaultValues: {
+      slippage: 1.0,
+      swap_amount: 10.0,
+      target_profit: 20.0,
+      stop_loss: 10.0,
+      rpc_url: "https://api.mainnet-beta.solana.com",
+      wallet_address: "",
+      telegram_enabled: false,
+      telegram_token: "",
+      telegram_chat_id: "",
+    },
+  });
+
+  // Update form when settings are loaded
+  useEffect(() => {
+    if (settings) {
+      form.reset({
+        slippage: settings.slippage,
+        swap_amount: settings.swap_amount,
+        target_profit: settings.target_profit,
+        stop_loss: settings.stop_loss,
+        rpc_url: settings.rpc_url,
+        wallet_address: settings.wallet_address,
+        telegram_enabled: settings.telegram_enabled,
+        telegram_token: settings.telegram_token || "",
+        telegram_chat_id: settings.telegram_chat_id || "",
       });
     }
+  }, [settings, form]);
+
+  // Handle settings form submission
+  const onSubmit = async (data: SettingsFormValues) => {
+    await saveSettings(data);
   };
 
   return (
@@ -96,7 +115,7 @@ const Index = () => {
           <CardContent>
             <div className="flex items-center space-x-2">
               <Activity className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">0</span>
+              <span className="text-2xl font-bold">{stats?.tokens_found || 0}</span>
             </div>
           </CardContent>
         </Card>
@@ -108,7 +127,7 @@ const Index = () => {
           <CardContent>
             <div className="flex items-center space-x-2">
               <History className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">0</span>
+              <span className="text-2xl font-bold">{stats?.trades_made || 0}</span>
             </div>
           </CardContent>
         </Card>
@@ -120,7 +139,9 @@ const Index = () => {
           <CardContent>
             <div className="flex items-center space-x-2">
               <BadgeDollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">0.00 USDC</span>
+              <span className="text-2xl font-bold">
+                {stats ? `${stats.profit_loss.toFixed(2)} USDC` : "0.00 USDC"}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -167,62 +188,163 @@ const Index = () => {
               <CardTitle>Bot Settings</CardTitle>
               <CardDescription>Configure your token sniping parameters</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="slippage">Slippage (%)</Label>
-                  <Input id="slippage" type="number" defaultValue="1.0" min="0.1" step="0.1" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="swap-amount">Swap Amount (USDC)</Label>
-                  <Input id="swap-amount" type="number" defaultValue="10.0" min="1" step="0.1" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="target-profit">Target Profit (%)</Label>
-                  <Input id="target-profit" type="number" defaultValue="20.0" min="1" step="1" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="stop-loss">Stop Loss (%)</Label>
-                  <Input id="stop-loss" type="number" defaultValue="10.0" min="1" step="1" />
-                </div>
-              </div>
-              
-              <Separator className="my-4" />
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="rpc-url">RPC URL</Label>
-                  <Input id="rpc-url" type="text" defaultValue="https://api.mainnet-beta.solana.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="wallet-address">Wallet Address</Label>
-                  <Input id="wallet-address" type="text" placeholder="Your Solana wallet address" />
-                </div>
-              </div>
-              
-              <Separator className="my-4" />
-              
-              <div className="space-y-4">
-                <div className="flex items-center space-x-2">
-                  <Switch id="telegram-alerts" />
-                  <Label htmlFor="telegram-alerts">Enable Telegram Alerts</Label>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram-token">Telegram Bot Token</Label>
-                    <Input id="telegram-token" type="password" placeholder="Enter your Telegram bot token" />
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)}>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="slippage"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Slippage (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" min="0.1" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="swap_amount"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Swap Amount (USDC)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="0.1" min="1" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="target_profit"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Target Profit (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="1" min="1" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="stop_loss"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Stop Loss (%)</FormLabel>
+                          <FormControl>
+                            <Input type="number" step="1" min="1" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="telegram-chat-id">Telegram Chat ID</Label>
-                    <Input id="telegram-chat-id" type="text" placeholder="Enter your Telegram chat ID" />
+                  
+                  <Separator className="my-4" />
+                  
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="rpc_url"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>RPC URL</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    
+                    <FormField
+                      control={form.control}
+                      name="wallet_address"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Wallet Address</FormLabel>
+                          <FormControl>
+                            <Input {...field} placeholder="Your Solana wallet address" />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
                   </div>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button>Save Settings</Button>
-            </CardFooter>
+                  
+                  <Separator className="my-4" />
+                  
+                  <div className="space-y-4">
+                    <FormField
+                      control={form.control}
+                      name="telegram_enabled"
+                      render={({ field }) => (
+                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                          <div className="space-y-0.5">
+                            <FormLabel className="text-base">Enable Telegram Alerts</FormLabel>
+                            <FormDescription>
+                              Receive alerts via Telegram when the bot executes trades.
+                            </FormDescription>
+                          </div>
+                          <FormControl>
+                            <Switch
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    
+                    {form.watch("telegram_enabled") && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="telegram_token"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Telegram Bot Token</FormLabel>
+                              <FormControl>
+                                <Input type="password" {...field} placeholder="Enter your Telegram bot token" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        
+                        <FormField
+                          control={form.control}
+                          name="telegram_chat_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Telegram Chat ID</FormLabel>
+                              <FormControl>
+                                <Input {...field} placeholder="Enter your Telegram chat ID" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+                <CardFooter>
+                  <Button type="submit" disabled={form.formState.isSubmitting}>
+                    {form.formState.isSubmitting ? "Saving..." : "Save Settings"}
+                  </Button>
+                </CardFooter>
+              </form>
+            </Form>
           </Card>
         </TabsContent>
 
@@ -233,11 +355,42 @@ const Index = () => {
               <CardDescription>Review your past token trades</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
+              {tradeHistory.length > 0 ? (
+                <div className="rounded-md border">
+                  <div className="grid grid-cols-5 gap-4 p-4 font-medium border-b">
+                    <div>Token</div>
+                    <div>Buy Price</div>
+                    <div>Sell Price</div>
+                    <div>Profit/Loss</div>
+                    <div>Status</div>
+                  </div>
+                  <div className="divide-y">
+                    {tradeHistory.map((trade) => (
+                      <div key={trade.id} className="grid grid-cols-5 gap-4 p-4">
+                        <div className="font-medium">{trade.token_name}</div>
+                        <div>{trade.entry_price.toFixed(4)} USDC</div>
+                        <div>{trade.exit_price ? `${trade.exit_price.toFixed(4)} USDC` : "-"}</div>
+                        <div className={trade.profit_loss_pct ? 
+                            (trade.profit_loss_pct > 0 ? "text-green-600" : "text-red-600") : ""}>
+                          {trade.profit_loss_pct ? `${trade.profit_loss_pct.toFixed(2)}%` : "-"}
+                        </div>
+                        <div>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium 
+                            ${trade.status === 'active' ? 'bg-blue-100 text-blue-800' : 
+                              trade.status === 'completed' ? 'bg-green-100 text-green-800' : 
+                              'bg-red-100 text-red-800'}`}>
+                            {trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
                 <div className="p-4 text-center text-muted-foreground">
                   No trades have been executed yet.
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
