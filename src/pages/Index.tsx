@@ -1,34 +1,18 @@
 
-import { useState, useEffect } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import * as z from "zod";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { BadgeDollarSign, Bot, History, Settings, Activity } from "lucide-react";
+import { BadgeDollarSign, Bot, History, Activity } from "lucide-react";
 import { useBot } from "@/hooks/use-bot";
 
-// Define form schema
-const settingsFormSchema = z.object({
-  slippage: z.coerce.number().min(0.1).max(100),
-  swap_amount: z.coerce.number().min(0.1),
-  target_profit: z.coerce.number().min(1),
-  stop_loss: z.coerce.number().min(1),
-  rpc_url: z.string().url("Must be a valid URL"),
-  wallet_address: z.string().min(32).max(44),
-  telegram_enabled: z.boolean(),
-  telegram_token: z.string().optional(),
-  telegram_chat_id: z.string().optional(),
-});
-
-type SettingsFormValues = z.infer<typeof settingsFormSchema>;
+// Import our parameter forms
+import { BuyConditionsForm } from "@/components/BuyConditionsForm";
+import { SellConditionsForm } from "@/components/SellConditionsForm";
+import { RiskControlForm } from "@/components/RiskControlForm";
+import { GeneralSettingsForm } from "@/components/GeneralSettingsForm";
+import { TradeHistoryTable } from "@/components/TradeHistoryTable";
 
 const Index = () => {
   const {
@@ -39,46 +23,7 @@ const Index = () => {
     stats,
     startBot,
     stopBot,
-    saveSettings
   } = useBot();
-
-  // Set up the form
-  const form = useForm<SettingsFormValues>({
-    resolver: zodResolver(settingsFormSchema),
-    defaultValues: {
-      slippage: 1.0,
-      swap_amount: 10.0,
-      target_profit: 20.0,
-      stop_loss: 10.0,
-      rpc_url: "https://api.mainnet-beta.solana.com",
-      wallet_address: "",
-      telegram_enabled: false,
-      telegram_token: "",
-      telegram_chat_id: "",
-    },
-  });
-
-  // Update form when settings are loaded
-  useEffect(() => {
-    if (settings) {
-      form.reset({
-        slippage: settings.slippage,
-        swap_amount: settings.swap_amount,
-        target_profit: settings.target_profit,
-        stop_loss: settings.stop_loss,
-        rpc_url: settings.rpc_url,
-        wallet_address: settings.wallet_address,
-        telegram_enabled: settings.telegram_enabled,
-        telegram_token: settings.telegram_token || "",
-        telegram_chat_id: settings.telegram_chat_id || "",
-      });
-    }
-  }, [settings, form]);
-
-  // Handle settings form submission
-  const onSubmit = async (data: SettingsFormValues) => {
-    await saveSettings(data);
-  };
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -97,12 +42,16 @@ const Index = () => {
               <div className="flex items-center space-x-2">
                 <Bot className="h-4 w-4 text-muted-foreground" />
                 <span className="text-2xl font-bold">
-                  {botStatus === "running" ? "Active" : botStatus === "error" ? "Error" : "Inactive"}
+                  {botStatus === "running" ? "Active" : 
+                   botStatus === "error" ? "Error" : 
+                   botStatus === "starting" ? "Starting" :
+                   botStatus === "stopping" ? "Stopping" : "Inactive"}
                 </span>
               </div>
               <div className={`h-3 w-3 rounded-full ${
                 botStatus === "running" ? "bg-green-500" : 
-                botStatus === "error" ? "bg-red-500" : "bg-yellow-500"
+                botStatus === "error" ? "bg-red-500" :
+                botStatus === "starting" || botStatus === "stopping" ? "bg-amber-500" : "bg-yellow-500"
               }`}></div>
             </div>
           </CardContent>
@@ -139,7 +88,7 @@ const Index = () => {
           <CardContent>
             <div className="flex items-center space-x-2">
               <BadgeDollarSign className="h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">
+              <span className={`text-2xl font-bold ${stats && stats.profit_loss > 0 ? "text-green-600" : stats && stats.profit_loss < 0 ? "text-red-600" : ""}`}>
                 {stats ? `${stats.profit_loss.toFixed(2)} USDC` : "0.00 USDC"}
               </span>
             </div>
@@ -150,6 +99,9 @@ const Index = () => {
       <Tabs defaultValue="control" className="w-full">
         <TabsList>
           <TabsTrigger value="control">Control</TabsTrigger>
+          <TabsTrigger value="buy-conditions">Buy Conditions</TabsTrigger>
+          <TabsTrigger value="sell-conditions">Sell Conditions</TabsTrigger>
+          <TabsTrigger value="risk-control">Risk Control</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
@@ -168,7 +120,7 @@ const Index = () => {
                 </AlertDescription>
               </Alert>
               <div className="flex gap-4 mt-4">
-                {botStatus !== "running" ? (
+                {botStatus !== "running" && botStatus !== "starting" ? (
                   <Button onClick={startBot} disabled={loading} className="w-full">
                     {loading ? "Starting..." : "Start Bot"}
                   </Button>
@@ -182,170 +134,44 @@ const Index = () => {
           </Card>
         </TabsContent>
 
+        <TabsContent value="buy-conditions" className="space-y-4 mt-2">
+          {settings ? (
+            <BuyConditionsForm buyConditions={settings.buy_conditions} />
+          ) : (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-center text-muted-foreground">Loading settings...</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="sell-conditions" className="space-y-4 mt-2">
+          {settings ? (
+            <SellConditionsForm sellConditions={settings.sell_conditions} />
+          ) : (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-center text-muted-foreground">Loading settings...</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="risk-control" className="space-y-4 mt-2">
+          {settings ? (
+            <RiskControlForm riskControl={settings.risk_control} />
+          ) : (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-center text-muted-foreground">Loading settings...</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
         <TabsContent value="settings" className="space-y-4 mt-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>Bot Settings</CardTitle>
-              <CardDescription>Configure your token sniping parameters</CardDescription>
-            </CardHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)}>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="slippage"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Slippage (%)</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.1" min="0.1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="swap_amount"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Swap Amount (USDC)</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="0.1" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="target_profit"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Target Profit (%)</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="1" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="stop_loss"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Stop Loss (%)</FormLabel>
-                          <FormControl>
-                            <Input type="number" step="1" min="1" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <Separator className="my-4" />
-                  
-                  <div className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="rpc_url"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>RPC URL</FormLabel>
-                          <FormControl>
-                            <Input {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    
-                    <FormField
-                      control={form.control}
-                      name="wallet_address"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Wallet Address</FormLabel>
-                          <FormControl>
-                            <Input {...field} placeholder="Your Solana wallet address" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <Separator className="my-4" />
-                  
-                  <div className="space-y-4">
-                    <FormField
-                      control={form.control}
-                      name="telegram_enabled"
-                      render={({ field }) => (
-                        <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                          <div className="space-y-0.5">
-                            <FormLabel className="text-base">Enable Telegram Alerts</FormLabel>
-                            <FormDescription>
-                              Receive alerts via Telegram when the bot executes trades.
-                            </FormDescription>
-                          </div>
-                          <FormControl>
-                            <Switch
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
-                    
-                    {form.watch("telegram_enabled") && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <FormField
-                          control={form.control}
-                          name="telegram_token"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Telegram Bot Token</FormLabel>
-                              <FormControl>
-                                <Input type="password" {...field} placeholder="Enter your Telegram bot token" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                        
-                        <FormField
-                          control={form.control}
-                          name="telegram_chat_id"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel>Telegram Chat ID</FormLabel>
-                              <FormControl>
-                                <Input {...field} placeholder="Enter your Telegram chat ID" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-                <CardFooter>
-                  <Button type="submit" disabled={form.formState.isSubmitting}>
-                    {form.formState.isSubmitting ? "Saving..." : "Save Settings"}
-                  </Button>
-                </CardFooter>
-              </form>
-            </Form>
-          </Card>
+          <GeneralSettingsForm settings={settings} />
         </TabsContent>
 
         <TabsContent value="history" className="space-y-4 mt-2">

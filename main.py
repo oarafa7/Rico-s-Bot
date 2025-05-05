@@ -2,6 +2,7 @@
 import asyncio
 import signal
 import sys
+import threading
 from typing import Dict, Any, Set
 from loguru import logger
 
@@ -10,6 +11,7 @@ from config import load_config, BotConfig
 from scanner import TokenScanner
 from trader import TokenTrader
 from telegram_alerts import TelegramAlerts
+from api_server import start_api_server
 
 class TokenSnipingBot:
     def __init__(self):
@@ -74,6 +76,7 @@ class TokenSnipingBot:
             f"• Target Profit: {self.config.target_profit}%\n"
             f"• Stop Loss: {self.config.stop_loss}%\n"
             f"• Swap Amount: {self.config.swap_amount_usdc} USDC\n"
+            f"• Min Liquidity: {self.config.minimum_liquidity} USDC\n"
         )
         
         # Keep running until stopped
@@ -125,6 +128,10 @@ async def main():
         await bot.stop()
 
 if __name__ == "__main__":
+    # Start the API server in a separate thread
+    api_thread = threading.Thread(target=start_api_server, daemon=True)
+    api_thread.start()
+    
     # Run the async main function
     try:
         asyncio.run(main())

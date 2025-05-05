@@ -1,17 +1,38 @@
 
-export type BotStatus = 'idle' | 'running' | 'error';
+export type BotStatus = 'idle' | 'running' | 'error' | 'starting' | 'stopping';
+
+export interface BuyConditions {
+  minimum_liquidity: number;
+  slippage: number;
+  allowed_dexes: string[];
+  require_verified_contract: boolean;
+  max_priority_fee: number;
+  enable_antibot: boolean;
+}
+
+export interface SellConditions {
+  target_profit: number;
+  stop_loss: number;
+  max_holding_time: number;
+  sell_on_volatility_spike: boolean;
+}
+
+export interface RiskControl {
+  position_size_percentage: number;
+  max_open_trades: number;
+  cooldown_period: number;
+}
 
 export interface BotSettings {
   id: string;
-  slippage: number;
-  swap_amount: number;
-  target_profit: number;
-  stop_loss: number;
   rpc_url: string;
   wallet_address: string;
   telegram_enabled: boolean;
   telegram_token?: string;
   telegram_chat_id?: string;
+  buy_conditions: BuyConditions;
+  sell_conditions: SellConditions;
+  risk_control: RiskControl;
   created_at: string;
   updated_at: string;
 }
