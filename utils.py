@@ -1,4 +1,3 @@
-
 import asyncio
 import base58
 from typing import Tuple, Dict, Any, Optional
@@ -12,7 +11,7 @@ import json
 # Remove the borsh_construct import that's causing problems
 # from borsh_construct import CStruct, String, U8, FixedSizedBytes
 
-async def create_solana_client(rpc_url: str) -> AsyncClient:
+async def create_solana_client(rpc_url: str)  -> AsyncClient:
     """Create a Solana client."""
     return AsyncClient(rpc_url)
 
@@ -50,13 +49,13 @@ async def get_jupiter_quote(
         params = {
             "inputMint": input_mint,
             "outputMint": output_mint,
-            "amount": str(amount_in_decimals),
+            "amount": str(amount_in_decimals) ,
             "slippageBps": slippage_bps_int,
         }
         
         # Get the quote from Jupiter
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            response = await http_client.get(f"{jupiter_api}/quote", params=params)
+        async with httpx.AsyncClient(timeout=30.0)  as http_client:
+            response = await http_client.get(f"{jupiter_api}/quote", params=params) 
             
         if response.status_code != 200:
             logger.error(f"Jupiter API error: {response.status_code} {response.text}")
