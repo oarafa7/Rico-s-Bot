@@ -9,6 +9,9 @@ from loguru import logger
 import httpx
 import json
 
+# Remove the borsh_construct import that's causing problems
+# from borsh_construct import CStruct, String, U8, FixedSizedBytes
+
 async def create_solana_client(rpc_url: str) -> AsyncClient:
     """Create a Solana client."""
     return AsyncClient(rpc_url)
