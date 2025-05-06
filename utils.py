@@ -1,3 +1,4 @@
+
 import asyncio
 import base58
 from typing import Tuple, Dict, Any, Optional
@@ -128,3 +129,22 @@ async def is_contract_verified(token_address: str) -> bool:
     except Exception as e:
         logger.error(f"Error checking if contract is verified: {e}")
         return False
+
+async def get_token_metadata(client: AsyncClient, token_pubkey: Pubkey) -> Dict[str, Any]:
+    """Get metadata for a token."""
+    try:
+        # In a real implementation, we'd query token metadata
+        # For this demo, we'll return simulated metadata
+        return {
+            "name": f"Test Token {str(token_pubkey)[:4]}",
+            "symbol": f"TEST{str(token_pubkey)[:2]}",
+            "decimals": 9,
+            "total_supply": 1000000000,
+        }
+    except Exception as e:
+        logger.error(f"Error getting token metadata: {e}")
+        return {
+            "name": "Unknown Token",
+            "symbol": "UNKNOWN",
+            "decimals": 9,
+        }
