@@ -1,3 +1,4 @@
+
 import asyncio
 import base58
 from typing import Tuple, Dict, Any, Optional
@@ -8,7 +9,8 @@ from loguru import logger
 import httpx
 import json
 
-# Remove the borsh_construct import that's causing problems
+# Remove the problematic borsh_construct import
+# The commented line below shows what was causing the error:
 # from borsh_construct import CStruct, String, U8, FixedSizedBytes
 
 async def create_solana_client(rpc_url: str)  -> AsyncClient:
